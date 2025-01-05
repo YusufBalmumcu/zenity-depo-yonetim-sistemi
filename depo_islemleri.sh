@@ -84,8 +84,8 @@ function urunleri_listele() {
 # Ürün Silme Fonksiyonu
 function urun_sil() {
     # Ürünleri listele ve seçim yap
-    local urun_secim=$(awk -F',' '{print $1 "," $2 "," $5}' "$depo_file" | zenity --list --title="Ürünleri Listele" \
-        --column="Ürün No" --column="Ürün Adı" --column="Kategori" --width=600 --height=400 --separator=",")
+    local urun_secim=$(awk -F',' 'NR>1 {print $1 "," $2 "," $5}' "$depo_file" | zenity --list --title="Ürünleri Listele" \
+        --column="Ürün No,Ürün Adı, Kategori" --width=600 --height=400 --separator=",")
 
     # Ürün seçilmezse işlemi iptal et
     if [ -z "$urun_secim" ]; then
@@ -103,7 +103,7 @@ function urun_sil() {
 
     # Silinen üründen sonra gelen ID'leri yeniden düzenle
     awk -F',' -v OFS=',' '
-    NR>1 { $1=NR-1; }
+    NR>1 { $1=NR-1; } 
     { print $0 }
     ' "$depo_file" > temp_file && mv temp_file "$depo_file"
 
@@ -111,57 +111,68 @@ function urun_sil() {
     zenity --info --title="Başarılı" --text="Ürün başarıyla silindi!\n\nÜrün No: $urun_no\nÜrün Adı: $urun_adi\nKategori: $urun_kategori"
 }
 
+
 # Ürün Güncelleme Fonksiyonu
 function urun_guncelle() {
-    # Kullanıcıdan güncellemek istediği ürünün adını al
-    local urun_adi=$(zenity --entry --title="Ürün Güncelleme" --text="Güncellemek istediğiniz ürünün adını girin:")
+    # Ürünleri listele ve seçim yap
+    local urun_secim=$(awk -F',' '{print $1 "," $2 "," $5}' "$depo_file" | zenity --list --title="Ürün Güncelleme" \
+        --column="Ürün No, Ürün Adı, Kategori" --width=400 --height=300 --separator=",")
 
-    # Eğer ürün adı boşsa, işlem iptal edilir
-    if [ -z "$urun_adi" ]; then
-        zenity --error --title="Hata" --text="Ürün adı boş olamaz."
+    # Ürün seçilmezse işlemi iptal et
+    if [ -z "$urun_secim" ]; then
+        zenity --error --title="Hata" --text="Lütfen bir ürün seçin."
         return
     fi
 
-    # Ürün adı, depo dosyasında var mı kontrol et
-    local urun_var=$(grep -i "^.*,$urun_adi," "$depo_file")
-    
-    # Ürün bulunmazsa, hata mesajı göster
-    if [ -z "$urun_var" ]; then
-        zenity --error --title="Hata" --text="Geçerli bir ürün bulunamadı: $urun_adi"
-        return
-    fi
+    # Seçilen ürünün ID'sini, adını ve kategorisini al
+    local urun_no=$(echo "$urun_secim" | cut -d',' -f1)
+    local urun_adi=$(echo "$urun_secim" | cut -d',' -f2)
+    local kategori=$(echo "$urun_secim" | cut -d',' -f3)
 
-    # Ürün bilgilerini almak (urun_no, stok_miktari, birim_fiyat)
-    local urun_no=$(echo "$urun_var" | cut -d',' -f1)
-    local mevcut_stok=$(echo "$urun_var" | cut -d',' -f3)
-    local mevcut_fiyat=$(echo "$urun_var" | cut -d',' -f4)
+    # Kullanıcıdan yeni stok miktarı ve birim fiyatı girmesini iste
+    local yeni_bilgiler=$(zenity --forms --title="Ürün Güncelleme" \
+        --text="Ürün bilgilerini güncelleyin:" \
+        --add-entry="Yeni Stok Miktarı" \
+        --add-entry="Yeni Birim Fiyatı")
 
-    # Kullanıcıya form ile yeni stok miktarı ve birim fiyatını güncellemesi için giriş soralım
-    local yeni_birim_fiyat_yeni_stok=$(zenity --forms --title="Ürün Güncelleme" \
-        --text="Ürün: $urun_adi (Ürün No: $urun_no)\nMevcut Stok Miktarı: $mevcut_stok\nMevcut Birim Fiyatı: $mevcut_fiyat" \
-        --add-entry="Yeni Stok Miktarı (şu anki: $mevcut_stok)" \
-        --add-entry="Yeni Birim Fiyatı (şu anki: $mevcut_fiyat)")
-
-    # Eğer formdan boş veri dönerse, işlem iptal edilir
-    if [ -z "$yeni_birim_fiyat_yeni_stok" ]; then
-        zenity --error --title="Hata" --text="Tüm alanlar doldurulmalıdır."
+    # Yeni bilgiler boşsa işlem iptal edilir
+    if [ -z "$yeni_bilgiler" ]; then
+        zenity --error --title="Hata" --text="Yeni bilgiler boş olamaz. İşlem iptal edildi."
         return
     fi
 
     # Bilgileri ayrıştırma
-    local yeni_stok_miktari=$(echo "$yeni_birim_fiyat_yeni_stok" | cut -d'|' -f1)
-    local yeni_birim_fiyat=$(echo "$yeni_birim_fiyat_yeni_stok" | cut -d'|' -f2)
+    local yeni_stok_miktari=$(echo "$yeni_bilgiler" | cut -d'|' -f1)
+    local yeni_birim_fiyat=$(echo "$yeni_bilgiler" | cut -d'|' -f2)
 
-    # Yeni stok miktarı ve birim fiyatının geçerli olup olmadığını kontrol et
-    if ! [[ "$yeni_birim_fiyat" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$yeni_stok_miktari" =~ ^[0-9]+$ ]]; then
-        zenity --error --title="Hata" --text="Geçersiz değerler girdiniz. Lütfen geçerli bir sayı girin."
+    # Boş alan kontrolü
+    if [[ -z "$yeni_stok_miktari" || -z "$yeni_birim_fiyat" ]]; then
+        zenity --error --title="Hata" --text="Tüm alanlar doldurulmalıdır."
+        return
+    fi
+
+    # Stok miktarı ve birim fiyatının 0'dan büyük olma kontrolü
+    if [ "$yeni_stok_miktari" -le 0 ] 2>/dev/null || ! [[ "$yeni_stok_miktari" =~ ^[0-9]+$ ]]; then
+        zenity --error --title="Hata" --text="Stok miktarı geçerli bir pozitif sayı olmalıdır."
+        return
+    fi
+
+    if [ "$yeni_birim_fiyat" -le 0 ] 2>/dev/null || ! [[ "$yeni_birim_fiyat" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        zenity --error --title="Hata" --text="Birim fiyatı geçerli bir sayı olmalıdır."
         return
     fi
 
     # Ürün bilgilerini güncelle
-    sed -i "s/^$urun_no,.*/$urun_no,$urun_adi,$yeni_stok_miktari,$yeni_birim_fiyat,$(echo "$urun_var" | cut -d',' -f5)/" "$depo_file"
+    awk -F',' -v urun_no="$urun_no" -v stok_miktari="$yeni_stok_miktari" -v birim_fiyat="$yeni_birim_fiyat" -v OFS=',' '
+    NR==1 { print $0; next }  # Başlık satırını olduğu gibi bırak
+    NR>1 {
+        if ($1 == urun_no) {
+            $3 = stok_miktari;
+            $4 = birim_fiyat;
+        }
+        print $0;
+    }' "$depo_file" > temp_file && mv temp_file "$depo_file"
 
-    # Güncelleme başarılı bildirimi
-    zenity --info --title="Başarılı" --text="Ürün başarıyla güncellendi: $urun_adi"
+    # Güncelleme işlemi başarılı
+    zenity --info --title="Başarılı" --text="Ürün başarıyla güncellendi!"
 }
-

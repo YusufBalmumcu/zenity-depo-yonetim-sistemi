@@ -124,56 +124,75 @@ function kullanicilari_listele() {
 
 # Kullanıcı Güncelleme Fonksiyonu
 function kullanici_guncelle() {
-    # Kullanıcı adını sor
-    local kullanici_adi=$(zenity --entry --title="Kullanıcı Adı Girin" --text="Güncellemek istediğiniz kullanıcı adını girin:")
+    # Kullanıcıları listele ve seçim yap
+    local kullanici_secim=$(awk -F',' '{print $1 "," $2}' "$kullanici_file" | zenity --list --title="Kullanıcı Güncelleme" \
+        --column="ID, Kullanıcı Adı" --width=400 --height=300 --separator=",")
 
-    # Kullanıcı adı boşsa işlem iptal edilir
-    if [ -z "$kullanici_adi" ]; then
-        zenity --error --title="Hata" --text="Kullanıcı adı boş olamaz. İşlem iptal edildi."
+    # Kullanıcı seçilmezse işlemi iptal et
+    if [ -z "$kullanici_secim" ]; then
+        zenity --error --title="Hata" --text="Lütfen bir kullanıcı seçin."
         return
     fi
 
-    # Kullanıcıyı dosyada arama 
-    local user_info=$(grep -i "^.*,$kullanici_adi," "$kullanici_file")
+    # Seçilen kullanıcının ID'sini ve adını al
+    local user_id=$(echo "$kullanici_secim" | cut -d',' -f1)
+    local user_name=$(echo "$kullanici_secim" | cut -d',' -f2)
 
-    # Eğer kullanıcı bulunamazsa işlem iptal edilir
-    if [ -z "$user_info" ]; then
-        zenity --error --title="Hata" --text="Kullanıcı adı bulunamadı. Lütfen geçerli bir kullanıcı adı girin."
-        return
-    fi
-
-    # Kullanıcı bilgilerini ayrıştırma
-    local user_id=$(echo "$user_info" | cut -d',' -f1)
+    # Kullanıcı bilgilerini dosyadan al
+    local user_info=$(grep -i "^$user_id," "$kullanici_file")
     local current_role=$(echo "$user_info" | cut -d',' -f3)
     local current_password=$(echo "$user_info" | cut -d',' -f4)
     local current_block_status=$(echo "$user_info" | cut -d',' -f5)
 
-    # Kullanıcı bilgilerini güncellemek için Zenity formu
-    local updated_info=$(zenity --forms --title="Kullanıcı Güncelle" \
+    # Kullanıcıdan yeni bilgiler al
+    local yeni_bilgiler=$(zenity --forms --title="Kullanıcı Güncelleme" \
         --text="Kullanıcı bilgilerini güncelleyin:" \
-        --add-entry="Kullanıcı Adı" --entry-text="$kullanici_adi" \
-        --add-entry="Yetki (admin/user)" --entry-text="$current_role" \
-        --add-password="Parola" --entry-text="$current_password" \
-        --add-combo="Blok Durumu" --combo-values="active,deactive" --combo-text="$current_block_status")
+        --add-entry="Yeni Kullanıcı Adı" \
+        --add-entry="Yeni Yetki (admin/user)" \
+        --add-password="Yeni Parola" \
+        --add-entry="Yeni Blok Durumu (active/deactive)")
 
-    # Güncellenmiş bilgiler alınmazsa işlem iptal edilir
-    if [ -z "$updated_info" ]; then
-        zenity --error --title="Hata" --text="Kullanıcı bilgileri boş olamaz. İşlem iptal edildi."
+    # Yeni bilgiler boşsa işlem iptal edilir
+    if [ -z "$yeni_bilgiler" ]; then
+        zenity --error --title="Hata" --text="Yeni bilgiler boş olamaz. İşlem iptal edildi."
         return
     fi
 
     # Bilgileri ayrıştırma
-    local new_user_name=$(echo "$updated_info" | cut -d'|' -f1)
-    local new_user_role=$(echo "$updated_info" | cut -d'|' -f2)
-    local new_user_password=$(echo "$updated_info" | cut -d'|' -f3)
-    local new_block_status=$(echo "$updated_info" | cut -d'|' -f4)
+    local yeni_user_name=$(echo "$yeni_bilgiler" | cut -d'|' -f1)
+    local yeni_user_role=$(echo "$yeni_bilgiler" | cut -d'|' -f2)
+    local yeni_user_password=$(echo "$yeni_bilgiler" | cut -d'|' -f3)
+    local yeni_block_status=$(echo "$yeni_bilgiler" | cut -d'|' -f4)
+
+    # Eski bilgileriyle birlikte alanları doldurmak için varsayılan değerler girme
+    yeni_user_name=${yeni_user_name:-$user_name}
+    yeni_user_role=${yeni_user_role:-$current_role}
+    yeni_user_password=${yeni_user_password:-$current_password}
+    yeni_block_status=${yeni_block_status:-$current_block_status}
+
+    # Boş alan kontrolü
+    if [[ -z "$yeni_user_name" || -z "$yeni_user_role" || -z "$yeni_user_password" || -z "$yeni_block_status" ]]; then
+        zenity --error --title="Hata" --text="Tüm alanlar doldurulmalıdır."
+        return
+    fi
 
     # Güncellenen kullanıcıyı dosyaya yaz
-    sed -i "s/^$user_id,.*$/$user_id,$new_user_name,$new_user_role,$new_user_password,$new_block_status/" "$kullanici_file"
+    awk -F',' -v user_id="$user_id" -v user_name="$yeni_user_name" -v user_role="$yeni_user_role" -v user_password="$yeni_user_password" -v block_status="$yeni_block_status" -v OFS=',' '
+    NR==1 { print $0; next }  # Başlık satırını olduğu gibi bırak
+    NR>1 {
+        if ($1 == user_id) {
+            $2 = user_name;
+            $3 = user_role;
+            $4 = user_password;
+            $5 = block_status;
+        }
+        print $0;
+    }' "$kullanici_file" > temp_file && mv temp_file "$kullanici_file"
 
-    # Güncelleme başarılı mesajı
+    # Güncelleme işlemi başarılı
     zenity --info --title="Başarılı" --text="Kullanıcı başarıyla güncellendi!"
 }
+
 
 
 
