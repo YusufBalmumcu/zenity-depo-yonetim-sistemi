@@ -1,0 +1,5 @@
+id, name, yetki, parola, blok
+1,user1,admin,123,active
+2,user2,user,123,active
+3,user3,user,123,deactive
+4,user4,user,123,active
