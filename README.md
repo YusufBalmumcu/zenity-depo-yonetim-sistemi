@@ -3,6 +3,7 @@
 Bu proje, bir depo yönetim sistemi oluşturmak için Bash betikleri kullanarak geliştirilmiştir. Proje, ürünlerin eklenmesi, güncellenmesi, silinmesi, kullanıcı yönetimi ve raporlama gibi temel işlemleri gerçekleştirmeyi sağlar. Ayrıca, veritabanı dosyaları (CSV formatında) kullanılarak ürün ve kullanıcı verilerini yönetir.
 
 - Projenin Demo Videosu : https://youtu.be/gZf9GKZM3TE
+- Repo linki : https://github.com/YusufBalmumcu/zenity-depo-yonetim-sistemi
 
 ## Özellikler
 
